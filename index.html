@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메트로놈 스탑워치</title>
+<style>
+  :root { --bg:#16181c; --ink:#1a1c20; --orange:#e8571f; --cream:#f4efe2; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 25%, #2b2e35, var(--bg) 70%);
+    font-family:"Helvetica Neue",Arial,"Apple SD Gothic Neo",sans-serif; padding:16px; }
+  .wrap { width:100%; max-width:400px; }
+  svg#watch { width:100%; height:auto; display:block; filter:drop-shadow(0 18px 28px rgba(0,0,0,.6)); }
+
+  .pusher { cursor:pointer; }
+  .pusher rect { transition:fill .2s; }
+  .pusher:hover rect.cap { fill:#fff; }
+  .pusher:active { transform:scale(.94); transform-box:fill-box; transform-origin:center; }
+  .tptr { opacity:0; transition:opacity .4s; }
+  .tmode .tptr { opacity:1; }
+  .tmode #hHand { opacity:.25; }
+  #hHand { transition:opacity .4s; }
+  .blink { opacity:.15; transition:opacity .25s; }
+  .blink.on { opacity:1; transition:none; }
+
+  .readouts { margin:14px 0 4px; text-align:center; color:#e8eaed; font-variant-numeric:tabular-nums; }
+  .readouts .lbl { font-size:10px; letter-spacing:.2em; color:#8b919b; }
+  .readouts .big { font-family:ui-monospace,Menlo,monospace; font-size:26px; letter-spacing:.06em; }
+  .readouts .real { font-family:ui-monospace,Menlo,monospace; font-size:15px; color:#9fd0ff; letter-spacing:.06em; }
+  .tempo-info { text-align:center; color:#ff8a4d; font-size:12px; letter-spacing:.1em; margin:6px 0 10px; }
+
+  .tempos { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:8px; }
+  .tempos button { padding:7px 0; font-size:11px; letter-spacing:.04em; border-radius:10px;
+    background:#272a31; box-shadow:inset 0 0 0 1px #3b3f48; color:#b9bec7; font-weight:600; }
+  .tempos button small { display:block; font-size:9px; opacity:.7; margin-top:2px; font-weight:400; }
+  .tempos button.sel { background:linear-gradient(180deg,#f0723c,var(--orange)); color:#fff; box-shadow:none; }
+  .tempos button.real { grid-column:span 2; box-shadow:inset 0 0 0 1px #4a6a8f; color:#9fd0ff; }
+  .tempos button.real.sel { box-shadow:none; color:#fff; }
+  .fine { grid-column:span 2; display:flex; gap:6px; }
+  .fine button { flex:1; font-size:14px; padding:6px 0; }
+
+  .btns { display:grid; grid-template-columns:1fr 1.3fr 1fr; gap:12px; margin-top:6px; }
+  button { font:inherit; border:0; cursor:pointer; padding:14px 0; border-radius:999px; color:#f2f2f2;
+    font-size:13px; font-weight:700; letter-spacing:.15em;
+    background:linear-gradient(180deg,#8d939c,#50555d); box-shadow:0 3px 0 #1c1e22, inset 0 1px 0 rgba(255,255,255,.4);
+    transition:transform .05s, box-shadow .05s; }
+  .btns button:active:not(:disabled) { transform:translateY(3px); box-shadow:0 0 0 #1c1e22; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  #start { background:linear-gradient(180deg,#f0723c,var(--orange)); box-shadow:0 3px 0 #8a2f0e, inset 0 1px 0 rgba(255,255,255,.35); }
+  #start.running { background:linear-gradient(180deg,#8d939c,#50555d); box-shadow:0 3px 0 #1c1e22, inset 0 1px 0 rgba(255,255,255,.4); }
+  #start:active:not(:disabled) { box-shadow:0 0 0 #8a2f0e; }
+
+  .snd { display:flex; justify-content:center; align-items:center; gap:8px; color:#9aa0a8; font-size:12px; margin-top:12px; cursor:pointer; user-select:none; }
+
+  ol { list-style:none; margin:14px 0 0; padding:8px 14px; max-height:150px; overflow:auto; min-height:42px;
+    background:var(--cream); border-radius:12px; color:var(--ink);
+    font-family:ui-monospace,Menlo,monospace; font-size:12.5px; font-weight:700; box-shadow:inset 0 2px 6px rgba(0,0,0,.2); }
+  ol:empty::before { content:"LAP --"; opacity:.3; }
+  li { display:flex; justify-content:space-between; padding:3px 0; gap:6px; }
+  li .r { color:#2a5c9a; }
+  li + li { border-top:1px dashed rgba(0,0,0,.2); }
+  .hint { text-align:center; color:#7b818b; font-size:11px; margin-top:12px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+<svg id="watch" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5f6f8"/><stop offset=".35" stop-color="#9aa0a8"/>
+      <stop offset=".55" stop-color="#e3e5e8"/><stop offset="1" stop-color="#5a6068"/>
+    </linearGradient>
+    <radialGradient id="dial" cx=".5" cy=".4" r=".7">
+      <stop offset="0" stop-color="#fdfbf4"/><stop offset="1" stop-color="#ebe6d6"/>
+    </radialGradient>
+    <radialGradient id="ring" cx=".5" cy=".5" r=".5">
+      <stop offset=".7" stop-color="#f3f0e6"/><stop offset="1" stop-color="#dcd8c9"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".3"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="push" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0f1f3"/><stop offset="1" stop-color="#7b8189"/>
+    </linearGradient>
+    <filter id="hs" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="1" dy="2" stdDeviation="1.5" flood-opacity=".35"/></filter>
+  </defs>
+
+  <!-- 용두 (3시) -->
+  <rect x="274" y="141" width="20" height="18" rx="3" fill="url(#steel)" stroke="#444" stroke-width=".8"/>
+  <g stroke="#555" stroke-width=".8"><path d="M279 143v14M284 143v14M289 143v14"/></g>
+
+  <!-- 푸셔: 10시(소리) / 2시(템포+) / 4시(템포-) -->
+  <g id="pushers"></g>
+
+  <!-- 케이스 -->
+  <circle cx="150" cy="150" r="138" fill="url(#steel)"/>
+  <circle cx="150" cy="150" r="134" fill="#15171a"/>
+  <!-- 바깥 링: 템포 스케일 -->
+  <circle cx="150" cy="150" r="132" fill="url(#ring)"/>
+  <g id="scale"></g>
+  <circle cx="150" cy="150" r="97.5" fill="#fff" stroke="#8a8f96" stroke-width="1.2"/>
+  <g id="marker"></g>
+
+  <!-- 안쪽 다이얼 (시간) -->
+  <g transform="translate(150 150) scale(.76) translate(-150 -150)">
+    <circle cx="150" cy="150" r="124" fill="url(#dial)"/>
+    <g id="ticks"></g>
+    <text x="150" y="92" text-anchor="middle" font-size="12" letter-spacing="4.5" fill="#1a1c20" font-weight="700">METRONOME</text>
+
+    <!-- 6시 LCD 윈도우: BPM -->
+    <rect x="122" y="192" width="56" height="30" rx="3" fill="#1d2318" stroke="#8a8f96" stroke-width="1.5"/>
+    <rect x="124.5" y="194.5" width="51" height="25" rx="2" fill="#bcc5a6"/>
+    <text id="lcdBpm" x="146" y="213" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="17" font-weight="700" fill="#1d2318">060</text>
+    <text x="168" y="204" text-anchor="middle" font-size="6" font-weight="700" fill="#1d2318">♩</text>
+    <circle id="beatDot" class="blink" cx="168" cy="213" r="3" fill="#1d2318"/>
+
+    <g id="hHand" filter="url(#hs)"><path d="M150 168 L145 150 L150 96 L155 150Z" fill="#1a1c20"/>
+      <path d="M150 150 L150 104" stroke="#f4efe2" stroke-width="1.5"/></g>
+    <g id="mHand" filter="url(#hs)"><path d="M150 172 L146 150 L150 52 L154 150Z" fill="#1a1c20"/>
+      <path d="M150 150 L150 60" stroke="#f4efe2" stroke-width="1.5"/></g>
+    <g id="sHand" filter="url(#hs)"><line x1="150" y1="178" x2="150" y2="34" stroke="#e8571f" stroke-width="1.8"/>
+      <circle cx="150" cy="60" r="4" fill="#e8571f"/></g>
+    <circle cx="150" cy="150" r="6.5" fill="#1a1c20"/><circle cx="150" cy="150" r="3" fill="#e8571f"/>
+  </g>
+
+  <!-- 템포 포인터 (템포 설정 시 시침이 스케일을 가리킴) -->
+  <g class="tptr" id="tptr"><path d="M150 164 L147.5 150 L150 50 L152.5 150Z" fill="#e8571f" filter="url(#hs)"/>
+    <circle cx="150" cy="150" r="4" fill="#e8571f"/></g>
+  <circle cx="150" cy="150" r="132" fill="url(#glass)" pointer-events="none"/>
+</svg>
+
+<div class="readouts">
+  <div class="lbl">WATCH TIME · 시계 시간</div>
+  <div class="big" id="readout">00:00:00.00</div>
+  <div class="lbl" style="margin-top:6px">REAL TIME · 실제 시간 (×1.00)</div>
+  <div class="real" id="realout">00:00:00.00</div>
+</div>
+<div class="tempo-info" id="tempoInfo"></div>
+<div class="tempos" id="tempos"></div>
+<div class="btns">
+  <button id="lap" disabled>LAP</button>
+  <button id="start">START</button>
+  <button id="reset">RESET</button>
+</div>
+<label class="snd"><input type="checkbox" id="sound"> 메트로놈 소리 (10시 푸셔)</label>
+<ol id="laps"></ol>
+<div class="hint">SPACE 시작/정지 · L 랩 · R 초기화<br>↑/→ 템포 +(2시 푸셔) · ↓/← 템포 −(4시 푸셔)<br>1박 = 시계 시간 1초</div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e); return e;
+  };
+
+  // 메트로놈 템포 스텝 (41단계, 40~304 BPM) / 60 BPM = 실제 시간(×1.0)
+  const STEPS = [40,42,44,46,48,50,52,54,56,58,60,63,66,69,72,76,80,84,88,92,96,100,104,108,112,116,120,
+                 126,132,138,144,152,160,168,176,184,192,200,208,240,304];
+  const REAL_IDX = STEPS.indexOf(60);
+  const ang = i => -160 + i * (320 / (STEPS.length - 1));
+  const TERMS = [
+    { name: 'LARGO', min: 40, max: 65, pick: 52 }, { name: 'ADAGIO', min: 66, max: 75, pick: 72 },
+    { name: 'ANDANTE', min: 76, max: 107, pick: 92 }, { name: 'MODERATO', min: 108, max: 119, pick: 112 },
+    { name: 'ALLEGRO', min: 120, max: 155, pick: 132 }, { name: 'VIVACE', min: 156, max: 175, pick: 160 },
+    { name: 'PRESTO', min: 176, max: 199, pick: 184 }, { name: 'PRESTISSIMO', min: 200, max: 999, pick: 208 },
+  ];
+  const termOf = bpm => TERMS.find(t => bpm >= t.min && bpm <= t.max);
+
+  function radial(parent, text, theta, r, fs, attrs) {
+    const g = mk('g', { transform: `rotate(${theta} 150 150)` }, parent);
+    const flip = Math.abs(theta) > 90;
+    const y = flip ? 150 - r - fs * .36 : 150 - r + fs * .36;
+    const t = mk('text', Object.assign({ x: 150, y, 'text-anchor': 'middle', 'font-size': fs }, attrs || {}), g);
+    if (flip) t.setAttribute('transform', `rotate(180 150 ${y})`);
+    t.textContent = text; return t;
+  }
+
+  // ----- 바깥 링: 템포 스케일 -----
+  const scale = $('scale');
+  const tickEls = [], numEls = [];
+  STEPS.forEach((b, i) => {
+    const a = ang(i) * Math.PI / 180, r1 = 111, r2 = 116;
+    tickEls.push(mk('line', { x1: 150 + r1 * Math.sin(a), y1: 150 - r1 * Math.cos(a), x2: 150 + r2 * Math.sin(a), y2: 150 - r2 * Math.cos(a),
+      stroke: '#1a1c20', 'stroke-width': 1 }, scale));
+    numEls.push(radial(scale, b, ang(i), 104, 5.6, { fill: '#1a1c20', 'font-weight': 600, 'font-family': 'Helvetica,Arial,sans-serif' }));
+  });
+  TERMS.forEach((t, k) => {
+    const idxs = STEPS.map((b, i) => [b, i]).filter(([b]) => b >= t.min && b <= t.max).map(([, i]) => i);
+    const a0 = ang(idxs[0]) - 3.5, a1 = ang(idxs[idxs.length - 1]) + 3.5, mid = (a0 + a1) / 2;
+    const R = 128.5, p = a => [150 + R * Math.sin(a * Math.PI / 180), 150 - R * Math.cos(a * Math.PI / 180)];
+    const [x0, y0] = p(a0), [x1, y1] = p(a1);
+    mk('path', { d: `M${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1}`, fill: 'none', stroke: k % 2 ? '#1a1c20' : '#e8571f',
+      'stroke-width': 2.6, 'stroke-linecap': 'butt' }, scale);
+    radial(scale, t.name, mid, 121, 6.4, { fill: '#1a1c20', 'font-weight': 700, 'letter-spacing': .6, 'font-family': 'Helvetica,Arial,sans-serif' });
+  });
+  mk('text', { x: 150, y: 285, 'text-anchor': 'middle', 'font-size': 6, fill: '#1a1c20', 'letter-spacing': 2, 'font-weight': 700, opacity: .0 }, scale);
+
+  // ----- 안쪽 다이얼 눈금 -----
+  const ticks = $('ticks');
+  for (let i = 0; i < 60; i++) {
+    const major = i % 5 === 0, a = i * 6 * Math.PI / 180, r1 = major ? 100 : 111, r2 = 119;
+    mk('line', { x1: 150 + r1 * Math.sin(a), y1: 150 - r1 * Math.cos(a), x2: 150 + r2 * Math.sin(a), y2: 150 - r2 * Math.cos(a),
+      stroke: major ? '#1a1c20' : '#555', 'stroke-width': major ? 3.2 : 1 }, ticks);
+  }
+  [[3, 242, 156], [9, 58, 156]].forEach(([n, x, y]) => mk('text', { x, y, 'text-anchor': 'middle', 'font-size': 16, 'font-weight': 700, fill: '#1a1c20' }, ticks).textContent = n);
+
+  // ----- 푸셔 -----
+  function pusher(deg, label, fn, id) {
+    const g = mk('g', { class: 'pusher', transform: `rotate(${deg} 150 150)` }, $('pushers'));
+    mk('rect', { x: 144, y: 4, width: 12, height: 16, rx: 2.5, fill: 'url(#push)', stroke: '#3b4047', 'stroke-width': .8 }, g);
+    const cap = mk('rect', { class: 'cap', x: 145, y: 1, width: 10, height: 8, rx: 2, fill: '#cfd3d8', stroke: '#3b4047', 'stroke-width': .8 }, g);
+    if (id) cap.id = id;
+    mk('title', {}, g).textContent = label;
+    g.onclick = fn;
+  }
+  pusher(-60, '10시 푸셔: 메트로놈 소리 on/off', () => { $('sound').checked = !$('sound').checked; $('sound').onchange(); }, 'capSound');
+  pusher(60, '2시 푸셔: 템포 +', () => setTempo(idx + 1));
+  pusher(120, '4시 푸셔: 템포 −', () => setTempo(idx - 1));
+
+  // ----- 템포 UI -----
+  const tempoBox = $('tempos');
+  TERMS.forEach(t => {
+    const b = document.createElement('button');
+    b.innerHTML = `${t.name[0] + t.name.slice(1).toLowerCase()}<small>${t.min}–${t.max > 900 ? '304' : t.max}</small>`;
+    b.onclick = () => setTempo(STEPS.indexOf(t.pick)); t.btn = b; tempoBox.appendChild(b);
+  });
+  const realBtn = document.createElement('button');
+  realBtn.className = 'real'; realBtn.innerHTML = '실시간 ×1.0<small>♩=60 · 1박 = 실제 1초</small>';
+  realBtn.onclick = () => setTempo(REAL_IDX); tempoBox.appendChild(realBtn);
+  const fine = document.createElement('div'); fine.className = 'fine';
+  fine.innerHTML = '<button id="tdn">− BPM</button><button id="tup">BPM +</button>';
+  tempoBox.appendChild(fine);
+  $('tdn').onclick = () => setTempo(idx - 1); $('tup').onclick = () => setTempo(idx + 1);
+
+  let idx = REAL_IDX, speed = 1, tmodeTimer = null;
+  function setTempo(i, quiet) {
+    idx = Math.max(0, Math.min(STEPS.length - 1, i));
+    const bpm = STEPS[idx], t = termOf(bpm); speed = bpm / 60;
+    tickEls.forEach((e, k) => { e.setAttribute('stroke', k === idx ? '#e8571f' : '#1a1c20'); e.setAttribute('stroke-width', k === idx ? 2.4 : 1); });
+    numEls.forEach((e, k) => { e.setAttribute('fill', k === idx ? '#e8571f' : '#1a1c20'); e.setAttribute('font-weight', k === idx ? 800 : 600); });
+    const mk0 = $('marker'); mk0.innerHTML = '';
+    mk('polygon', { points: '146.5,52 153.5,52 150,60', fill: '#e8571f', transform: `rotate(${ang(idx)} 150 150)` }, mk0);
+    $('tptr').setAttribute('transform', `rotate(${ang(idx)} 150 150)`);
+    $('lcdBpm').textContent = String(bpm).padStart(3, '0');
+    TERMS.forEach(x => x.btn.classList.toggle('sel', x === t));
+    realBtn.classList.toggle('sel', bpm === 60);
+    $('tempoInfo').textContent = `${t.name} ♩=${bpm} · 시간 속도 ×${speed.toFixed(2)}`;
+    if (!quiet) { $('wrap').classList.add('tmode'); clearTimeout(tmodeTimer); tmodeTimer = setTimeout(() => $('wrap').classList.remove('tmode'), 3000); }
+    restartBeat(); render();
+  }
+
+  // ----- 메트로놈 비트/소리 -----
+  let audio, beatTimer = null;
+  function beat() {
+    const d = $('beatDot'); d.classList.add('on'); setTimeout(() => d.classList.remove('on'), 90);
+    if (!$('sound').checked) return;
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = 1100; g.gain.setValueAtTime(.25, audio.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, audio.currentTime + .05);
+    o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + .06);
+  }
+  function restartBeat() {
+    clearInterval(beatTimer); beatTimer = null;
+    if (running) { beat(); beatTimer = setInterval(beat, 60000 / STEPS[idx]); }
+  }
+  $('sound').onchange = () => {
+    $('capSound').setAttribute('fill', $('sound').checked ? '#e8571f' : '#cfd3d8');
+    if ($('sound').checked) { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); }
+  };
+
+  // ----- 스탑워치 -----
+  let elapsed = 0, real = 0, lastTs = 0, running = false, raf = 0, lastLap = 0, lastLapReal = 0, lapCount = 0;
+  const p2 = n => String(n).padStart(2, '0');
+  const fmt = ms => `${p2(Math.floor(ms / 60000))}:${p2(Math.floor(ms / 1000) % 60)}.${p2(Math.floor(ms / 10) % 100)}`;
+  const fmtH = ms => `${p2(Math.floor(ms / 3600000))}:${p2(Math.floor(ms / 60000) % 60)}:${p2(Math.floor(ms / 1000) % 60)}.${p2(Math.floor(ms / 10) % 100)}`;
+
+  function render() {
+    const sec = elapsed / 1000;
+    $('sHand').setAttribute('transform', `rotate(${(sec % 60) * 6} 150 150)`);
+    $('mHand').setAttribute('transform', `rotate(${(sec / 60 % 60) * 6} 150 150)`);
+    $('hHand').setAttribute('transform', `rotate(${(sec / 3600 % 12) * 30} 150 150)`);
+    $('readout').textContent = fmtH(elapsed);
+    $('realout').textContent = fmtH(real);
+  }
+  function loop(now) {
+    const dt = now - lastTs; lastTs = now;
+    real += dt; elapsed += dt * speed; render();
+    if (running) raf = requestAnimationFrame(loop);
+  }
+  function setUI() {
+    $('start').textContent = running ? 'STOP' : 'START';
+    $('start').classList.toggle('running', running);
+    $('lap').disabled = !running;
+  }
+  function toggle() {
+    running = !running;
+    if (running) { lastTs = performance.now(); raf = requestAnimationFrame(loop); }
+    else cancelAnimationFrame(raf);
+    setUI(); restartBeat();
+  }
+  function lap() {
+    if (!running) return;
+    lapCount++;
+    const s = elapsed - lastLap, sr = real - lastLapReal; lastLap = elapsed; lastLapReal = real;
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${p2(lapCount)}</span><span>+${fmt(s)}</span><span class="r">실제 +${fmt(sr)}</span><span>${fmt(elapsed)}</span>`;
+    $('laps').prepend(li);
+  }
+  function reset() {
+    running = false; cancelAnimationFrame(raf);
+    elapsed = 0; real = 0; lastLap = 0; lastLapReal = 0; lapCount = 0; $('laps').innerHTML = '';
+    setUI(); restartBeat(); render();
+  }
+
+  $('start').onclick = toggle; $('lap').onclick = lap; $('reset').onclick = reset;
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); toggle(); }
+    else if (e.key.toLowerCase() === 'l') lap();
+    else if (e.key.toLowerCase() === 'r') reset();
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); setTempo(idx + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); setTempo(idx - 1); }
+  });
+  setTempo(REAL_IDX, true); render();
+</script>
+</body>
+</html>
